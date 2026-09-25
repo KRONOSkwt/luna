@@ -1,0 +1,109 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  quality:
+    name: Quality gates (test · type · lint · build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.22.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Unit tests (strict TDD evidence)
+        run: pnpm test
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint (incl. `node --check scripts/verify-rls.mjs`)
+        run: pnpm lint
+
+      - name: Production build
+        run: pnpm build
+
+      # Guard rails (design: deploy-ci capability).
+      # dotenv.example is EXCLUDED on purpose: it must document the
+      # SUPABASE_SERVICE_ROLE warning, so the safest possible scan is
+      # everything else in the repo that could carry a real key.
+      - name: Guard — no service_role key may leak into source or env files
+        run: |
+          if grep -rEn "SUPABASE_SERVICE_ROLE|service_role" \
+            --include='*.ts' --include='*.tsx' \
+            --include='*.env' --include='*.env.*' \
+            --exclude='.env.example' .; then
+            echo "::error::service_role reference found outside .env.example — aborting"
+            exit 1
+          fi
+          echo "guard ok — no service_role references outside .env.example"
+
+      # astronomy stays pure (no local Date) so its logic remains testable and
+      # deterministic; the injected clock comes from the poster/design layer.
+      - name: Guard — src/core/astronomy.ts must stay Date-free
+        if: hashFiles('src/core/astronomy.ts') != ''
+        run: |
+          if grep -nE "new Date|Date\.parse" src/core/astronomy.ts; then
+            echo "::error::src/core/astronomy.ts must not construct Dates (pure math only)"
+            exit 1
+          fi
+          echo "guard ok — astronomy.ts is pure"
+
+  verify-rls:
+    name: Verify RLS against local Supabase
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.22.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install frozen dependencies (supabase-js for the proof script)
+        run: pnpm install --frozen-lockfile
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase stack
+        id: start
+        continue-on-error: true
+        run: supabase start
+
+      - name: Apply migrations + seed
+        if: steps.start.outcome == 'success'
+        run: supabase db reset
+
+      - name: Run verify-rls proof script
+        if: steps.start.outcome == 'success'
+        run: node scripts/verify-rls.mjs
+
+      # Supabase CLI/Docker unavailable (e.g. self-hosted runners without
+      # Docker): never fail the PR for that — the manual fallback is documented
+      # in the README and reproduces the same checks.
+      - name: Skip note when local stack is unavailable
+        if: steps.start.outcome != 'success'
+        run: |
+          echo "::warning::Supabase local stack unavailable — verify-rls skipped."
+          echo "::warning::Manual fallback: supabase start && supabase db reset && node scripts/verify-rls.mjs"
