@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { STARS } from './starfield'
-import { TwoDSky, projectStars } from './components/TwoDSky'
+import { projectStars } from './celestial'
+import { TwoDSky } from './components/TwoDSky'
 
 function createFake2dContext() {
   const stats = { amberFills: 0, baseFills: 0 }

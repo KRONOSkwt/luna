@@ -50,3 +50,57 @@ export function buildStarPositions(): Float32Array {
   }
   return positions
 }
+
+export type ProjectedStar = { x: number; y: number; r: number; golden: boolean }
+
+/**
+ * Pure perspective projection of unit-vector stars onto a canvas plane facing
+ * `forward`. Only stars with forward-dot > 0 are visible; screen scale grows
+ * as the camera plane recedes (scale = fovK / depth).
+ */
+export function projectStars(
+  stars: Array<[number, number, number]>,
+  forward: [number, number, number],
+  width: number,
+  height: number,
+  goldenIndices: Set<number> = new Set(),
+): ProjectedStar[] {
+  const [fx, fy, fz] = forward
+
+  // Tangent axes: right = normalize(cross(forward, worldUp)), up' = cross(right, forward).
+  let rx = -fz
+  const ry = 0
+  let rz = fx
+  const rightLength = Math.hypot(rx, ry, rz)
+  if (rightLength < 1e-9) {
+    rx = 1
+    rz = 0
+  } else {
+    rx /= rightLength
+    rz /= rightLength
+  }
+  const ux = ry * fz - rz * fy
+  const uy = rz * fx - rx * fz
+  const uz = rx * fy - ry * fx
+
+  const fovK = Math.min(width, height) * 1.2
+  const cx = width / 2
+  const cy = height / 2
+
+  const points: ProjectedStar[] = []
+  for (let i = 0; i < stars.length; i++) {
+    const [sx, sy, sz] = stars[i]
+    const depth = sx * fx + sy * fy + sz * fz
+    if (depth <= 0) continue
+    const screenX = sx * rx + sy * ry + sz * rz
+    const screenY = sx * ux + sy * uy + sz * uz
+    const scale = fovK / depth
+    points.push({
+      x: cx + screenX * scale,
+      y: cy - screenY * scale,
+      r: Math.max(0.4, 1.1 / depth),
+      golden: goldenIndices.has(i),
+    })
+  }
+  return points
+}

@@ -1,14 +1,16 @@
+import type { ReactNode } from 'react'
+import { BovedaPage } from './features/boveda/BovedaPage'
+
+// W2 override: hand-rolled route switch (no react-router in this slice).
+// The public dome owns '/'; ANY other path falls back to it — zero dead UI,
+// no white screen on a stray URL (design D11 without a router).
+const sectorRoutes: Record<string, ReactNode> = {
+  '/': <BovedaPage />,
+}
+
 function App() {
-  return (
-    <main className="flex min-h-svh flex-col items-center justify-center gap-4 px-6 text-center">
-      <h1 className="font-editorial text-4xl font-medium tracking-wide text-polvo-estelar italic">
-        El Observatorio
-      </h1>
-      <p className="font-mono text-xs uppercase tracking-[0.28em] text-polvo-estelar/60">
-        Bóveda Celeste · La Paz
-      </p>
-    </main>
-  )
+  const path = window.location.pathname
+  return sectorRoutes[path] ?? <BovedaPage />
 }
 
 export default App
