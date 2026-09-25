@@ -1,0 +1,47 @@
+:root {
+  color-scheme: dark;
+  --obsidiana: #07080a;
+  --polvo-estelar: #e8e6e3;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--obsidiana);
+  color: var(--polvo-estelar);
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.app-shell {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 0 24px;
+  text-align: center;
+}
+
+.app-title {
+  margin: 0;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 44px;
+  letter-spacing: 0.01em;
+}
+
+.app-subtitle {
+  margin: 0;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: rgba(232, 230, 227, 0.6);
+}
