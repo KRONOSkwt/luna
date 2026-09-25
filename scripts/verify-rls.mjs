@@ -50,25 +50,39 @@ function localEnv() {
   }
   const env = {}
   for (const line of res.stdout.split('\n')) {
-    const m = line.match(/^([A-Z_]+)=(\S+)$/)
-    if (m) env[m[1]] = m[2]
+    // Values may be bare (ANON_KEY=eyJ...) or quoted (API_URL="http://...").
+    const m = line.match(/^([A-Z_]+)=(?:"([^"]+)"|(\S+))$/)
+    if (m) env[m[1]] = m[2] ?? m[3]
   }
+  // The CLI renamed these variables across versions (SUPABASE_* prefix in
+  // some builds, bare names in the classic output, API_URL vs SUPABASE_URL),
+  // and some builds print no URL at all. Accept every documented spelling,
+  // fall back to the well-known local defaults, and never crash on a missing
+  // key — print the keys we actually saw so the next failure self-describes.
   return {
-    url: env.SUPABASE_URL,
-    anon: env.SUPABASE_ANON_KEY,
+    url: env.SUPABASE_URL ?? env.API_URL ?? 'http://127.0.0.1:54321',
+    anon: env.SUPABASE_ANON_KEY ?? env.ANON_KEY,
     service: env.SUPABASE_SERVICE_ROLE_KEY ?? env.SERVICE_ROLE_KEY,
+    keys: Object.keys(env),
   }
 }
 
 async function main() {
   // --- local-only guard -----------------------------------------------------
-  const { url, anon, service } = localEnv()
+  const { url, anon, service, keys } = localEnv()
+  console.log(
+    `verify-rls: stack ${url} (env keys: ${keys.length ? keys.join(', ') : 'none'})`,
+  )
   if (!url.includes('127.0.0.1') && !url.includes('localhost')) {
     console.error(`verify-rls refuses to run against non-local Supabase: ${url}`)
     process.exit(1)
   }
   if (!anon || !service) {
-    console.error('verify-rls: missing ANON/SERVICE keys from `supabase status -o env`')
+    console.error(
+      `verify-rls: missing ANON/SERVICE keys from \`supabase status -o env\` (found keys: ${
+        keys.length ? keys.join(', ') : 'none'
+      })`,
+    )
     process.exit(1)
   }
 
