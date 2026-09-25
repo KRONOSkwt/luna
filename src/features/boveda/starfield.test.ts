@@ -36,7 +36,7 @@ describe('nearestStarsTo', () => {
     const indices = nearestStarsTo([0, 1, 0], 24)
     const dotOf = (i: number) =>
       STARS[i][0] * 0 + STARS[i][1] * 1 + STARS[i][2] * 0
-    const maxDot = Math.max(...STARS.map(([x, y]) => y))
+    const maxDot = Math.max(...STARS.map(([, y]) => y))
 
     expect(dotOf(indices[0])).toBeCloseTo(maxDot, 9)
     // strictly descending ranking across the returned slice
