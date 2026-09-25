@@ -38,15 +38,15 @@ jobs:
         run: pnpm build
 
       # Guard rails (design: deploy-ci capability).
-      # dotenv.example is EXCLUDED on purpose: it must document the
-      # SUPABASE_SERVICE_ROLE warning, so the safest possible scan is
-      # everything else in the repo that could carry a real key.
+      # Scans TRACKED files only via `git grep`, so dependency declarations in
+      # node_modules can never trip the guard — while any committed source/env
+      # leak still fails the job. .env.example is EXCLUDED on purpose: it must
+      # document the SUPABASE_SERVICE_ROLE warning, so the scan covers every
+      # other file that could carry a real key.
       - name: Guard — no service_role key may leak into source or env files
         run: |
-          if grep -rEn "SUPABASE_SERVICE_ROLE|service_role" \
-            --include='*.ts' --include='*.tsx' \
-            --include='*.env' --include='*.env.*' \
-            --exclude='.env.example' .; then
+          if git grep -nIE "SUPABASE_SERVICE_ROLE|service_role" -- \
+              '*.ts' '*.tsx' ':(glob)*.env*' ':(exclude).env.example'; then
             echo "::error::service_role reference found outside .env.example — aborting"
             exit 1
           fi

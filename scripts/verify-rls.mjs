@@ -15,6 +15,10 @@
 //   d. authenticated NON-admin can SELECT but INSERT fails  (42501, is_admin() = false)
 //   e. authenticated ADMIN (email on admins allowlist) can SELECT/INSERT/UPDATE/DELETE
 //   f. anonymous cannot READ the admins allowlist           (deny-all, no grants)
+//
+// Sign-ups are confirmed via the service admin API (updateUserById with
+// email_confirm) right before sign-in, so every auth check is deterministic
+// regardless of whether the local stack auto-confirms emails.
 
 import { spawnSync } from 'node:child_process'
 import process from 'node:process'
@@ -27,6 +31,14 @@ function report(name, ok, detail = '') {
   if (ok) PASS.add(name)
   else FAIL.add(name)
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`)
+}
+
+function printVerdict() {
+  console.log(`\nverify-rls: ${PASS.size} passed, ${FAIL.size} failed`)
+  if (FAIL.size > 0) {
+    for (const name of FAIL) console.log(`  FAILED: ${name}`)
+    process.exit(1)
+  }
 }
 
 function localEnv() {
@@ -76,7 +88,12 @@ async function main() {
     !anonReadErr && Array.isArray(anonRows) && anonRows.length === 5,
     anonReadErr ? anonReadErr.message : `${anonRows?.length ?? 0} rows (expected 5 from seed)`,
   )
-  if (anonReadErr || anonRows?.length !== 5) return
+  if (anonReadErr || anonRows?.length !== 5) {
+    // A failing anon read is a failed proof: print the verdict and exit 1
+    // instead of silently returning a green exit code.
+    printVerdict()
+    return
+  }
 
   // --- b. anonymous INSERT rejected (42501) ----------------------------------
   const { error: anonInsertErr } = await anonClient.from('memories').insert({
@@ -108,47 +125,72 @@ async function main() {
 
   // --- d. authenticated non-admin: read ok, write 42501 ----------------------
   const guestEmail = email()
-  const { error: guestSignUpErr } = await anonClient.auth.signUp({
+  const { data: guestSignupData, error: guestSignUpErr } = await anonClient.auth.signUp({
     email: guestEmail,
     password: pass,
   })
   const guestHostError =
     guestSignUpErr?.message && /confirm|verification|otp/i.test(guestSignUpErr.message)
   if (guestSignUpErr && guestHostError) {
+    // Defensive fallback: signUp errored, so the service API could not confirm
+    // the user — the host needs human email confirmation the proof cannot drive.
     console.log('SKIP  d. non-admin write — local host requires email confirmation')
   } else {
+    if (guestSignupData?.user?.id) {
+      // Deterministic confirmation, idempotent even when the stack auto-confirms.
+      await serviceClient.auth.admin.updateUserById(guestSignupData.user.id, {
+        email_confirm: true,
+      })
+    }
     const { data: guestSession, error: guestSignInErr } = await anonClient.auth.signInWithPassword({
       email: guestEmail,
       password: pass,
     })
-    const guest = createClient(url, anon, { auth: { persistSession: false } })
-    await guest.auth.setSession(guestSession.session)
-    const { error: guestReadErr } = await guest.from('memories').select('id').limit(1)
-    const { error: guestWriteErr } = await guest.from('memories').insert({
-      date: '2026-01-02',
-      title: 'guest row',
-      description: 'must not persist',
-    })
-    report(
-      'd. non-admin authenticated: SELECT ok / INSERT 42501',
-      Boolean(!guestSignInErr && !guestReadErr && guestWriteErr?.code === '42501'),
-      !guestSignInErr && !guestReadErr
-        ? `code ${guestWriteErr?.code ?? '(none)'}`
-        : [guestSignInErr?.message, guestReadErr?.message, guestWriteErr?.message]
-            .filter(Boolean)
-            .join('; '),
-    )
+    if (!guestSession?.session) {
+      // Never crash and never silently pass: report the check as FAIL.
+      report(
+        'd. non-admin authenticated: SELECT ok / INSERT 42501',
+        false,
+        guestSignInErr?.message ?? 'no session returned after sign-in',
+      )
+    } else {
+      const guest = createClient(url, anon, { auth: { persistSession: false } })
+      await guest.auth.setSession(guestSession.session)
+      const { error: guestReadErr } = await guest.from('memories').select('id').limit(1)
+      const { error: guestWriteErr } = await guest.from('memories').insert({
+        date: '2026-01-02',
+        title: 'guest row',
+        description: 'must not persist',
+      })
+      report(
+        'd. non-admin authenticated: SELECT ok / INSERT 42501',
+        Boolean(!guestSignInErr && !guestReadErr && guestWriteErr?.code === '42501'),
+        !guestSignInErr && !guestReadErr
+          ? `code ${guestWriteErr?.code ?? '(none)'}`
+          : [guestSignInErr?.message, guestReadErr?.message, guestWriteErr?.message]
+              .filter(Boolean)
+              .join('; '),
+      )
+    }
   }
 
   // --- e. admin (allowlist): full CRUD ---------------------------------------
   const adminEmail = email()
-  const { error: adminSignUpErr } = await anonClient.auth.signUp({
+  const { data: adminSignupData, error: adminSignUpErr } = await anonClient.auth.signUp({
     email: adminEmail,
     password: pass,
   })
-  if (adminSignUpErr && /confirm|verification|otp/i.test(adminSignUpErr.message)) {
+  const adminHostError =
+    adminSignUpErr?.message && /confirm|verification|otp/i.test(adminSignUpErr.message)
+  if (adminSignUpErr && adminHostError) {
     console.log('SKIP  e. admin CRUD — local host requires email confirmation')
   } else {
+    if (adminSignupData?.user?.id) {
+      // Deterministic confirmation, idempotent even when the stack auto-confirms.
+      await serviceClient.auth.admin.updateUserById(adminSignupData.user.id, {
+        email_confirm: true,
+      })
+    }
     const { error: allowlistErr } = await serviceClient
       .from('admins')
       .insert({ email: adminEmail.toLowerCase() })
@@ -156,55 +198,64 @@ async function main() {
       email: adminEmail,
       password: pass,
     })
-    const admin = createClient(url, anon, { auth: { persistSession: false } })
-    await admin.auth.setSession(adminSession.session)
+    if (!adminSession?.session) {
+      // Never crash and never silently pass: report the check as FAIL.
+      report(
+        'e. admin allowlist CRUD',
+        false,
+        adminSignInErr?.message ?? 'no session returned after sign-in',
+      )
+    } else {
+      const admin = createClient(url, anon, { auth: { persistSession: false } })
+      await admin.auth.setSession(adminSession.session)
 
-    const { data: adminRows, error: adminReadErr } = await admin.from('memories').select('*')
-    const { error: adminInsertErr } = await admin.from('memories').insert({
-      date: '2026-01-03',
-      title: 'verify admin row',
-      description: 'temporary row deleted at the end of this run',
-    })
-    let adminUpdateErr = null
-    let adminDeleteErr = null
-    let insertedId = null
-    if (!adminInsertErr) {
-      const { data: inserted } = await admin
-        .from('memories')
-        .select('id')
-        .eq('date', '2026-01-03')
-        .single()
-      insertedId = inserted?.id ?? null
-      const upd = await admin
-        .from('memories')
-        .update({ title: 'verify admin row (edited)' })
-        .eq('id', insertedId)
-      adminUpdateErr = upd.error
-      const del = await admin.from('memories').delete().eq('id', insertedId)
-      adminDeleteErr = del.error
+      const { data: adminRows, error: adminReadErr } = await admin.from('memories').select('*')
+      const { error: adminInsertErr } = await admin.from('memories').insert({
+        date: '2026-01-03',
+        title: 'verify admin row',
+        description: 'temporary row deleted at the end of this run',
+      })
+      let adminUpdateErr = null
+      let adminDeleteErr = null
+      let insertedId = null
+      if (!adminInsertErr) {
+        const { data: inserted } = await admin
+          .from('memories')
+          .select('id')
+          .eq('date', '2026-01-03')
+          .single()
+        insertedId = inserted?.id ?? null
+        const upd = await admin
+          .from('memories')
+          .update({ title: 'verify admin row (edited)' })
+          .eq('id', insertedId)
+        adminUpdateErr = upd.error
+        const del = await admin.from('memories').delete().eq('id', insertedId)
+        adminDeleteErr = del.error
+      }
+      report(
+        'e. admin allowlist CRUD',
+        Boolean(
+          !allowlistErr &&
+          !adminSignInErr &&
+          !adminReadErr &&
+          !adminInsertErr &&
+          !adminUpdateErr &&
+          !adminDeleteErr &&
+          adminRows?.length >= 5,
+        ),
+        [
+          allowlistErr?.message,
+          adminSignInErr?.message,
+          adminReadErr?.message,
+          adminInsertErr?.message,
+          adminUpdateErr?.message,
+          adminDeleteErr?.message,
+        ]
+          .filter(Boolean)
+          .join('; ') || `${adminRows?.length ?? 0} rows read, insert→update→delete roundtrip ok`,
+      )
     }
-    report(
-      'e. admin allowlist CRUD',
-      Boolean(
-        !allowlistErr &&
-        !adminSignInErr &&
-        !adminReadErr &&
-        !adminInsertErr &&
-        !adminUpdateErr &&
-        !adminDeleteErr &&
-        adminRows?.length >= 5,
-      ),
-      [
-        allowlistErr?.message,
-        adminSignInErr?.message,
-        adminReadErr?.message,
-        adminInsertErr?.message,
-        adminUpdateErr?.message,
-        adminDeleteErr?.message,
-      ]
-        .filter(Boolean)
-        .join('; ') || `${adminRows?.length ?? 0} rows read, insert→update→delete roundtrip ok`,
-    )
   }
 
   // --- f. admins allowlist is not readable by anon (deny-all) ----------------
@@ -216,11 +267,7 @@ async function main() {
   )
 
   // --- verdict ----------------------------------------------------------------
-  console.log(`\nverify-rls: ${PASS.size} passed, ${FAIL.size} failed`)
-  if (FAIL.size > 0) {
-    for (const name of FAIL) console.log(`  FAILED: ${name}`)
-    process.exit(1)
-  }
+  printVerdict()
 }
 
 main().catch((err) => {
