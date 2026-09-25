@@ -1,0 +1,8 @@
+node_modules
+dist
+dist-ssr
+coverage
+.atl
+pnpm-lock.yaml
+# SDD artifact — never reformat
+sdd.md

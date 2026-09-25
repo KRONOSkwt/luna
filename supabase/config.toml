@@ -1,0 +1,26 @@
+# Local Supabase configuration for `supabase start` (CI verify-rls job + local dev).
+# Committed so the local stack is deterministic; omitted keys fall back to CLI defaults.
+project_id = "luna"
+
+[api]
+enabled = true
+port = 54321
+
+[db]
+port = 54322
+
+[auth]
+enabled = true
+enable_signup = true
+
+[studio]
+enabled = false
+
+[storage]
+enabled = false
+
+[edge_runtime]
+enabled = false
+
+[analytics]
+enabled = false
