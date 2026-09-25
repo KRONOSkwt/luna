@@ -6,8 +6,6 @@ describe('App shell', () => {
   it('renders the Observatorio heading in Spanish', () => {
     render(<App />)
 
-    expect(
-      screen.getByRole('heading', { name: /el observatorio/i }),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /el observatorio/i })).toBeInTheDocument()
   })
 })

@@ -4,3 +4,5 @@ dist-ssr
 coverage
 .atl
 pnpm-lock.yaml
+# SDD artifact — never reformat
+sdd.md

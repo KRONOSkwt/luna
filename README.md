@@ -6,12 +6,12 @@ uno; el resto se escribe con los ojos puestos en el cielo de La Paz.
 
 ## Stack
 
-| Capa     | Elección                                  |
-| -------- | ----------------------------------------- |
-| UI       | React 18 + TypeScript + Vite              |
-| Estilos  | Tailwind CSS (tokens Obsidiana/Ámbar/Polvo Estelar) |
-| Datos    | Supabase (Postgres + RLS) · React Query   |
-| Escena   | React Three Fiber (futuro: observatorio 3D) |
+| Capa    | Elección                                            |
+| ------- | --------------------------------------------------- |
+| UI      | React 18 + TypeScript + Vite                        |
+| Estilos | Tailwind CSS (tokens Obsidiana/Ámbar/Polvo Estelar) |
+| Datos   | Supabase (Postgres + RLS) · React Query             |
+| Escena  | React Three Fiber (futuro: observatorio 3D)         |
 
 ## Empezar
 
@@ -48,11 +48,11 @@ La Paz» — hasta que la línea de tiempo (siguiente slice) la muestre.
 
 ## Modelo de seguridad (RLS) — en un vistazo
 
-| Acción            | Anónimo | Usuario normal | Admin (allowlist) |
-| ----------------- | ------- | -------------- | ----------------- |
-| Leer memories     | ✅      | ✅             | ✅                |
-| Escribir memories | ❌ 42501| ❌ 42501       | ✅                |
-| Leer admins       | ❌      | ❌             | ❌ (solo bypass service) |
+| Acción            | Anónimo  | Usuario normal | Admin (allowlist)        |
+| ----------------- | -------- | -------------- | ------------------------ |
+| Leer memories     | ✅       | ✅             | ✅                       |
+| Escribir memories | ❌ 42501 | ❌ 42501       | ✅                       |
+| Leer admins       | ❌       | ❌             | ❌ (solo bypass service) |
 
 - `memories` — lectura pública, escritura solo si `is_admin()`.
 - `admins` — deny-all: sin policies ni grants; solo la service key la lee.
@@ -72,14 +72,14 @@ El script **se niega a correr contra un Supabase remoto** (solo `127.0.0.1` /
 
 ## Scripts
 
-| Comando         | Qué hace                                          |
-| --------------- | ------------------------------------------------- |
-| `pnpm dev`      | Servidor de desarrollo                            |
-| `pnpm test`     | Vitest (strict TDD: cada pieza con su RED→GREEN)  |
-| `pnpm lint`     | ESLint + typecheck ×2 + `node --check` del script |
-| `pnpm typecheck`| `tsc --noEmit` sobre la app                       |
-| `pnpm build`    | Typecheck + build de producción                   |
-| `pnpm format`   | Prettier en todo el repo                          |
+| Comando          | Qué hace                                          |
+| ---------------- | ------------------------------------------------- |
+| `pnpm dev`       | Servidor de desarrollo                            |
+| `pnpm test`      | Vitest (strict TDD: cada pieza con su RED→GREEN)  |
+| `pnpm lint`      | ESLint + typecheck ×2 + `node --check` del script |
+| `pnpm typecheck` | `tsc --noEmit` sobre la app                       |
+| `pnpm build`     | Typecheck + build de producción                   |
+| `pnpm format`    | Prettier en todo el repo                          |
 
 ## CI
 
