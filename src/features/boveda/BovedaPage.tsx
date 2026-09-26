@@ -42,7 +42,7 @@ export function BovedaPage() {
   }, [golden])
 
   const sky = hasWebGL ? (
-    <SkyErrorBoundary>
+    <SkyErrorBoundary date={selectedDate} golden={golden}>
       <CelestialCanvas date={selectedDate} golden={golden} />
     </SkyErrorBoundary>
   ) : (
