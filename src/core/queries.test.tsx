@@ -8,23 +8,39 @@ import { distinctDates, isGoldenDate, memoriesForDate, useMemories } from './que
 // The real core/supabase module throws at import time without env vars, so the
 // data layer is mocked at the module boundary — useMemories keeps its real
 // TanStack Query wiring while the fake supabase stub returns scripted rows.
+// Unlike a hard-wired chain, the fake RECORDS every order(col, ascending) call
+// so the tests can pin the exact query shape the hook emits.
 const mockState = vi.hoisted(() => ({
   result: { data: null as Memory[] | null, error: null as Error | null },
 }))
 
-vi.mock('./supabase', () => ({
-  supabase: {
-    from: () => ({
-      select: () => ({
-        order: () => ({
-          order: () => ({
-            order: () => Promise.resolve(mockState.result),
-          }),
-        }),
-      }),
-    }),
-  },
-}))
+const orderCalls = vi.hoisted(() => [] as Array<[string, boolean]>)
+
+vi.mock('./supabase', () => {
+  type Chain = {
+    order(col: string, args?: { ascending?: boolean }): Chain
+    then(onFulfilled: (value: unknown) => unknown): Promise<unknown>
+  }
+
+  const makeChain = (): Chain => {
+    const chain: Chain = {
+      order(col, args) {
+        orderCalls.push([col, args?.ascending ?? true])
+        return chain
+      },
+      then(onFulfilled) {
+        return Promise.resolve(mockState.result).then(onFulfilled)
+      },
+    }
+    return chain
+  }
+
+  return {
+    supabase: {
+      from: () => ({ select: () => makeChain() }),
+    },
+  }
+})
 
 const rows: Memory[] = [
   {
@@ -73,6 +89,7 @@ function makeWrapper() {
 describe('useMemories', () => {
   beforeEach(() => {
     mockState.result = { data: rows, error: null }
+    orderCalls.length = 0
   })
 
   afterEach(() => {
@@ -84,6 +101,17 @@ describe('useMemories', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(result.current.data).toEqual(rows)
+  })
+
+  it('emits exactly the spec query shape: date desc, order_index asc, created_at asc', async () => {
+    const { result } = renderHook(() => useMemories(), { wrapper: makeWrapper() })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(orderCalls).toEqual([
+      ['date', false],
+      ['order_index', true],
+      ['created_at', true],
+    ])
   })
 
   it('surfaces the query error instead of swallowing it', async () => {
