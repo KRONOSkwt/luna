@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { STARS } from './starfield'
 import { projectStars } from './celestial'
@@ -98,6 +98,70 @@ describe('TwoDSky', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it('resizes the backing store once when the sky is measured, and skips redundant resizes', () => {
+    // jsdom has no ResizeObserver; stub one that records its callback.
+    class FakeResizeObserver {
+      static callback: ResizeObserverCallback | null = null
+      constructor(callback: ResizeObserverCallback) {
+        FakeResizeObserver.callback = callback
+      }
+      observe() {}
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver)
+
+    render(<TwoDSky date="2026-09-21" golden={false} />)
+
+    // Track backing-store writes through per-instance accessors, since jsdom
+    // reports clientWidth 0 and real width/height would resize on every set.
+    let widthSets = 0
+    let heightSets = 0
+    let backingW = 300
+    let backingH = 150
+    const canvas = screen.getByTestId('two-d-sky')
+    Object.defineProperty(canvas, 'clientWidth', { configurable: true, value: 480 })
+    Object.defineProperty(canvas, 'clientHeight', { configurable: true, value: 200 })
+    Object.defineProperty(canvas, 'width', {
+      configurable: true,
+      get: () => backingW,
+      set: (value: number) => {
+        widthSets++
+        backingW = value
+      },
+    })
+    Object.defineProperty(canvas, 'height', {
+      configurable: true,
+      get: () => backingH,
+      set: (value: number) => {
+        heightSets++
+        backingH = value
+      },
+    })
+
+    act(() => {
+      FakeResizeObserver.callback?.(
+        [] as ResizeObserverEntry[],
+        FakeResizeObserver as unknown as ResizeObserver,
+      )
+    })
+
+    expect(widthSets).toBe(1)
+    expect(heightSets).toBe(1)
+    expect(backingW).toBe(480)
+    expect(backingH).toBe(200)
+
+    // A second observation with the same size must not re-allocate the store.
+    act(() => {
+      FakeResizeObserver.callback?.(
+        [] as ResizeObserverEntry[],
+        FakeResizeObserver as unknown as ResizeObserver,
+      )
+    })
+    expect(widthSets).toBe(1)
+    expect(heightSets).toBe(1)
   })
 
   it('paints the starfield onto the 2D canvas on mount', () => {
