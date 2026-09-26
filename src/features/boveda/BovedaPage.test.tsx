@@ -134,7 +134,20 @@ describe('BovedaPage', () => {
     expect(vibrate).toHaveBeenCalledWith([40, 60, 40])
   })
 
-  it('does not vibrate — and does not break — when the device lacks vibrate', async () => {
+  it('does not vibrate when the selected date is not golden', async () => {
+    const vibrate = vi.spyOn(navigator, 'vibrate').mockImplementation(() => true)
+    renderPage()
+    await screen.findByText('Nuestra noche')
+    // the golden default already fired once — clear so only the tap counts
+    vibrate.mockClear()
+
+    fireEvent.click(screen.getByRole('button', { name: '14.09.2026' }))
+    expect(await screen.findByText('Bailando bajo las estrellas')).toBeInTheDocument()
+
+    expect(vibrate).not.toHaveBeenCalled()
+  })
+
+  it('renders without vibrating when the device lacks navigator.vibrate', async () => {
     delete (navigator as { vibrate?: unknown }).vibrate
     renderPage()
 
