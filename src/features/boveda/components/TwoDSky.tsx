@@ -35,18 +35,48 @@ export function TwoDSky({
     [golden, date, forward],
   )
 
+  // Logical size + backing-store dpr the draw loop reads. Sized once on mount
+  // and on ResizeObserver events — NOT per frame (writing canvas.width/height
+  // re-allocates the bitmap every RAF otherwise).
+  const sizeRef = useRef({ width: 0, height: 0, dpr: 1 })
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const syncSize = () => {
+      const next = {
+        width: canvas.clientWidth || canvas.width,
+        height: canvas.clientHeight || canvas.height,
+        dpr: Math.min(window.devicePixelRatio || 1, 2),
+      }
+      const current = sizeRef.current
+      if (
+        next.width === current.width &&
+        next.height === current.height &&
+        next.dpr === current.dpr
+      ) {
+        return
+      }
+      canvas.width = Math.round(next.width * next.dpr)
+      canvas.height = Math.round(next.height * next.dpr)
+      sizeRef.current = next
+    }
+
+    syncSize() // first paint must see the real size, even without an observer
+    if (typeof ResizeObserver !== 'function') return
+    const observer = new ResizeObserver(syncSize)
+    observer.observe(canvas)
+    return () => observer.disconnect()
+  }, [])
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return // stub-friendly: nothing to paint, nothing to crash
 
-    const dpr = Math.min(window.devicePixelRatio || 1, 2)
     const draw = () => {
-      const width = canvas.clientWidth || canvas.width
-      const height = canvas.clientHeight || canvas.height
-      canvas.width = Math.round(width * dpr)
-      canvas.height = Math.round(height * dpr)
+      const { width, height, dpr } = sizeRef.current
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       ctx.clearRect(0, 0, width, height)
 
