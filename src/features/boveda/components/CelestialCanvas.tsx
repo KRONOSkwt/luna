@@ -1,7 +1,7 @@
 import { Canvas, useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import * as THREE from 'three'
-import { buildStarColors, buildStarPositions, meanDirection, STAR_RADIUS } from '../celestial'
+import { DOME_POINTS_MATERIAL, buildStarColors, buildStarPositions, meanDirection, STAR_RADIUS } from '../celestial'
 import { STARS, nearestStarsTo, starDirectionForDate } from '../starfield'
 import { usePauseOnHidden } from '../usePauseOnHidden'
 
@@ -120,7 +120,7 @@ export function CelestialCanvas({ date, golden }: { date: string | null; golden:
     >
       <CameraRig date={date}>
         <points frustumCulled={false} geometry={geometry}>
-          <pointsMaterial attach="material" size={0.7} sizeAttenuation={false} vertexColors depthWrite={false} />
+          <pointsMaterial attach="material" {...DOME_POINTS_MATERIAL} />
         </points>
         <GoldenGlow indices={goldenStars} />
       </CameraRig>

@@ -1,3 +1,4 @@
+import * as THREE from 'three'
 import { STAR_COUNT, STARS } from './starfield'
 
 /**
@@ -5,6 +6,31 @@ import { STAR_COUNT, STARS } from './starfield'
  * the sphere at the origin, so star coordinates must be scaled to it.
  */
 export const STAR_RADIUS = 90
+
+/**
+ * Gate review C1/W1: the dome material must read as soft additive light —
+ * additive blending (spec MUST), 90% opacity, size 1.2 with distance
+ * attenuation, per-vertex colors, no depth write. Exported as the single
+ * source of truth for the <pointsMaterial> config (jsdom cannot observe
+ * boolean attributes on custom elements, so the tuple is pinned here).
+ */
+export const DOME_POINTS_MATERIAL: {
+  size: number
+  sizeAttenuation: boolean
+  vertexColors: boolean
+  transparent: boolean
+  opacity: number
+  blending: THREE.Blending
+  depthWrite: boolean
+} = {
+  size: 1.2,
+  sizeAttenuation: true,
+  vertexColors: true,
+  transparent: true,
+  opacity: 0.9,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+}
 
 const BASE_STAR_COLOR: [number, number, number] = [0.9098, 0.902, 0.8902] // #E8E6E3
 const AMBER_STAR_COLOR: [number, number, number] = [0.9608, 0.702, 0.3608] // #F5B35C
