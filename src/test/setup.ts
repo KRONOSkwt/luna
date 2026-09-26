@@ -1,4 +1,10 @@
 import '@testing-library/jest-dom/vitest'
+import { cleanup } from '@testing-library/react'
+import { afterEach } from 'vitest'
+
+// vitest runs without global hooks, so RTL's auto-cleanup never registers;
+// without this, rendered DOM leaks between tests in the same file.
+afterEach(() => cleanup())
 
 // --- jsdom stubs for browser APIs the app relies on (PR b canvas work) ---
 // 3D/2D canvas contexts are no-op proxies: components must mount and keep
